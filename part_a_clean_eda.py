@@ -132,7 +132,7 @@ def main() -> None:
     ).to_csv(OUTPUT_DIR / "part_a_delay_by_group.csv", index=False)
 
     numeric_columns = modelling.select_dtypes(include="number")
-    numeric_columns.corr().round(4).to_csv(
+    numeric_columns.corr().to_csv(
         OUTPUT_DIR / "part_a_correlations.csv", index_label="column"
     )
 
