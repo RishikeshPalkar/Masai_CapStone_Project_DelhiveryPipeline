@@ -50,106 +50,37 @@ python predict_delay.py
 
 ## 2. Data Findings
 
-This section documents the data foundation established in **Part A**, detailing the data hygiene steps, validation checks, and core statistical findings regarding transit delays across the Delhivery network. All figures are generated directly by [`part_a_clean_eda.py`](file:///e:/Masai_CapStone_Delhivery/Masai_CapStone_Project_DelhiveryPipeline/part_a_clean_eda.py) and verified against [`outputs/part_a_checks.csv`](file:///e:/Masai_CapStone_Delhivery/Masai_CapStone_Project_DelhiveryPipeline/outputs/part_a_checks.csv), [`outputs/part_a_delay_by_group.csv`](file:///e:/Masai_CapStone_Delhivery/Masai_CapStone_Project_DelhiveryPipeline/outputs/part_a_delay_by_group.csv), and [`outputs/part_a_correlations.csv`](file:///e:/Masai_CapStone_Delhivery/Masai_CapStone_Project_DelhiveryPipeline/outputs/part_a_correlations.csv).
+All metrics are computed in [`part_a_clean_eda.py`](file:///e:/Masai_CapStone_Delhivery/Masai_CapStone_Project_DelhiveryPipeline/part_a_clean_eda.py) and recorded in `outputs/part_a_checks.csv`, `outputs/part_a_delay_by_group.csv`, and `outputs/part_a_correlations.csv`.
 
----
+### Key Data Cleaning Metrics
+- **Dataset:** 1,224 raw shipments deduplicated to 1,200 records (24 duplicates removed; 0 nulls after merge with hubs).
+- **Service Types:** Standardized 12 irregular spellings down to 3 (`Express`, `Standard`, `Economy`).
+- **Sentinels & Missing Values:** 5 scanner-fault sentinels (>100 kg) treated as missing. Filled with stored medians: `distance_km` = **314.95 km**, `parcel_weight_kg` = **1.83 kg**, `declared_value_inr` = **INR 1,121.50**.
+- **Delays:** 278 out of 1,200 shipments delayed (**23.17%** overall delay rate).
 
-### Data Pipeline Foundation & Hygiene
-
-Raw shipment records exported from enterprise warehouse management systems contain pervasive data entry anomalies, scanner errors, and formatting inconsistencies. Before modeling, [`src/shipment_prep.py`](file:///e:/Masai_CapStone_Delhivery/Masai_CapStone_Project_DelhiveryPipeline/src/shipment_prep.py) executes a sequential, leakage-safe cleaning pipeline:
-
-1. **Deduplication:** Exactly 24 duplicate rows were identified and removed, reducing 1,224 raw records to 1,200 unique historical shipments.
-2. **Text Standardization:** Disparate casing and irregular spacing across 12 distinct `service_type` spellings (e.g. `"express"`, `"  Express "`, `"EXPRESS"`) were stripped and title-cased into exactly 3 clean categories (`Express`, `Standard`, `Economy`).
-3. **Payment Mode Imputation:** Blank entries in `payment_mode` (18 rows) were filled with the explicit placeholder `"Unknown"` rather than discarded.
-4. **Declared Value Sanitization:** Text values formatted with the Indian Rupee symbol and commas (e.g. `₹1,290`) had currency characters removed, converted into numeric `declared_value_inr`, and the raw string column was dropped.
-5. **Timestamp Parsing:** Dispatch timestamps were converted into native datetime format, unlocking hour-of-day (`dispatch_hour`) and day-of-week (`is_weekend`) temporal features.
-6. **Scanner-Fault Sentinel Elimination:** The Delhivery parcel network operates with a maximum parcel weight limit of 40 kg. Five rows containing `parcel_weight_kg = 999.0` were detected as scanner-fault sentinel codes and treated as missing values (`NaN`).
-7. **Leakage-Safe Median Imputation:** Missing numeric features were filled using unrounded medians computed across non-missing values in the deduplicated historical table:
-   - `distance_km`: **314.95 km** (36 missing rows filled)
-   - `parcel_weight_kg`: **1.83 kg** (24 genuine missing + 5 sentinel rows filled)
-   - `declared_value_inr`: **INR 1,121.50** (12 missing rows filled)
-8. **Feature Enrichment & Hub Merge:** Left-merging with [`data/hubs.csv`](file:///e:/Masai_CapStone_Delhivery/Masai_CapStone_Project_DelhiveryPipeline/data/hubs.csv) preserved all 1,200 records without loss. Derived fields were engineered strictly without using `delivery_hours`: `promised_hours`, `is_cod`, `is_weekend`, `dispatch_hour`, and `log_declared_value`. Across all 17 model features and target columns, exactly **0 nulls** remain.
-
-#### Data Quality & Preprocessing Verification Checks (`outputs/part_a_checks.csv`)
-
-| Metric | Measured Value | Operational Rationale / Verification |
-| :--- | :---: | :--- |
-| `raw_rows` | **1224** | Raw export row count from warehouse staging |
-| `duplicate_rows_removed` | **24** | Exact duplicate shipments dropped |
-| `rows_after_dedup` | **1200** | Unique shipments retained |
-| `missing_distance_km_before` | **36** | Missing lane distance cells prior to imputation |
-| `missing_parcel_weight_before` | **24** | Missing weight cells prior to imputation (excluding sentinels) |
-| `sentinel_weight_rows` | **5** | Faulty sensor readings (`999.0 kg`) replaced with NaN |
-| `missing_declared_value_before`| **12** | Missing invoice values prior to cleaning |
-| `missing_payment_mode_before` | **18** | Missing COD/Prepaid status imputed as `"Unknown"` |
-| `service_type_spellings_before`| **12** | Inconsistent casing/whitespace strings in raw data |
-| `service_type_spellings_after` | **3** | Exactly standardized to `Express`, `Standard`, `Economy` |
-| `median_distance_km` | **314.95** | Imputation baseline for route distance |
-| `median_parcel_weight_kg` | **1.83** | Imputation baseline for shipment weight |
-| `median_declared_value_inr` | **1121.5** | Imputation baseline for parcel valuation |
-| `rows_after_hub_merge` | **1200** | Perfect 1:1 integrity maintained on left join |
-| `nulls_in_features_and_target` | **0** | Clean tabular dataset ready for model consumption |
-| `delayed_count` | **278** | Shipments exceeding promised delivery SLA |
-| `delay_rate` | **0.2317** | 23.17% overall network delay rate |
-| `hours_q1` / `hours_q3` | **43.2550 / 72.5625** | Interquartile delivery time spread (IQR = 29.3075 hrs) |
-| `hours_lower_bound` / `upper_bound` | **−0.7063 / 116.5238** | 1.5 × IQR outlier filtering envelope |
-| `hours_outlier_count` | **1** | Only 1 extreme delivery anomaly detected |
-| `declared_value_mean_inr` | **1533.0542** | Right-skewed raw parcel value mean |
-| `declared_value_median_inr` | **1121.5** | Robust central tendency before transformation |
-| `log_declared_value_mean` | **7.0277** | Post-transform natural log mean |
-| `log_declared_value_median` | **7.0224** | Post-transform natural log median (symmetric) |
-
----
-
-### Group-Level Delay Evidence (`outputs/part_a_delay_by_group.csv`)
-
-| Dimension | Group Segment | Total Shipments | Delayed Count | Delay Rate | Mean Delivery Hours |
+### Delay Rate by Segment (`outputs/part_a_delay_by_group.csv`)
+| Dimension | Group | Shipments | Delayed | Delay Rate | Mean Hours |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Service Type** | `Economy` | 315 | 27 | **0.0857** (8.57%) | 82.0931 hrs |
-| **Service Type** | `Express` | 243 | 119 | **0.4897** (48.97%) | 36.8056 hrs |
-| **Service Type** | `Standard` | 642 | 132 | **0.2056** (20.56%) | 52.2569 hrs |
-| **Hub Tier** | `Tier 1` (Metro) | 400 | 16 | **0.0400** (4.00%) | 48.5664 hrs |
-| **Hub Tier** | `Tier 2` (Regional) | 400 | 86 | **0.2150** (21.50%) | 58.8194 hrs |
-| **Hub Tier** | `Tier 3` (Stretched) | 400 | 176 | **0.4400** (44.00%) | 63.4943 hrs |
-| **Distance Band** | `0-200 km` | 274 | 6 | **0.0219** (2.19%) | 46.7559 hrs |
-| **Distance Band** | `201-400 km` | 563 | 77 | **0.1368** (13.68%) | 55.9660 hrs |
-| **Distance Band** | `401-600 km` | 275 | 120 | **0.4364** (43.64%) | 64.2660 hrs |
-| **Distance Band** | `601+ km` | 88 | 75 | **0.8523** (85.23%) | 72.2608 hrs |
+| **Service Type** | Economy | 315 | 27 | **0.0857** | 82.0931 |
+| **Service Type** | Express | 243 | 119 | **0.4897** | 36.8056 |
+| **Service Type** | Standard | 642 | 132 | **0.2056** | 52.2569 |
+| **Hub Tier** | Tier 1 | 400 | 16 | **0.0400** | 48.5664 |
+| **Hub Tier** | Tier 2 | 400 | 86 | **0.2150** | 58.8194 |
+| **Hub Tier** | Tier 3 | 400 | 176 | **0.4400** | 63.4943 |
+| **Distance Band** | 0-200 km | 274 | 6 | **0.0219** | 46.7559 |
+| **Distance Band** | 201-400 km | 563 | 77 | **0.1368** | 55.9660 |
+| **Distance Band** | 401-600 km | 275 | 120 | **0.4364** | 64.2660 |
+| **Distance Band** | 601+ km | 88 | 75 | **0.8523** | 72.2608 |
 
----
-
-### Detailed Findings & Strategic Takeaways
-
-#### 1. Service Type Disparities (Finding i)
-- **Express is delayed most frequently and at the highest rate: 0.4897 (48.97%)**, with 119 delayed parcels out of 243 bookings. While Express delivers fastest in absolute terms (mean duration of 36.8056 hours), its aggressive 36-hour SLA promise provides negligible buffer against unexpected last-mile obstacles.
-- By contrast, **Standard** experiences a delay rate of **0.2056 (20.56%)** (132 / 642 delayed, mean 52.2569 hours against a 60-hour SLA), and **Economy** achieves the highest reliability with a delay rate of only **0.0857 (8.57%)** (27 / 315 delayed, mean 82.0931 hours against a generous 96-hour SLA).
-- **Operational Insight:** Express shipments suffer severe failure rates because operational dispatch protocols treat Express identically to Standard parcels during sorting and vehicle loading, despite Express having a window that is 24 hours shorter.
-
-#### 2. Delay Rate Escalation Across Hub Tiers (Finding ii)
-- Transit reliability deteriorates sharply as parcels originate further down the hub hierarchy:
-  - **Tier 1 (Metro):** Delay rate of **0.0400** (16 delays across 400 shipments, 4.00%), mean delivery time of 48.5664 hours.
-  - **Tier 2 (Regional):** Delay rate of **0.2150** (86 delays across 400 shipments, 21.50%), mean delivery time of 58.8194 hours.
-  - **Tier 3 (Stretched/Remote):** Delay rate of **0.4400** (176 delays across 400 shipments, 44.00%), mean delivery time of 63.4943 hours.
-- **Operational Insight:** Delay rates increase by **40.00 percentage points (an 11-fold increase)** from Tier 1 to Tier 3. Stretched Tier 3 hubs suffer from longer multi-leg feeder runs, lower daily processing capacities (270–520 parcels/day vs. 1,150–1,600 in Tier 1), and greater rider tour lengths.
-
-#### 3. Distance Band Vulnerability (Finding iii)
-- Delivery delay rates increase monotonically as line-haul distance expands:
-  - **0–200 km:** Delay rate of **0.0219** (6 / 274 shipments, 2.19%), mean hours 46.7559.
-  - **201–400 km:** Delay rate of **0.1368** (77 / 563 shipments, 13.68%), mean hours 55.9660.
-  - **401–600 km:** Delay rate of **0.4364** (120 / 275 shipments, 43.64%), mean hours 64.2660.
-  - **601+ km:** Delay rate of **0.8523** (75 / 88 shipments, 85.23%), mean hours 72.2608.
-- **Operational Insight:** Local intradistrict runs (<200 km) almost never fail (<2.2%). However, long-haul corridors exceeding 600 km suffer an alarming **85.23% breach rate**, compounding highway transit variability with local drop delays. Dynamic promise buffers (+12 to 24 hours) are urgently needed for routes over 400 km.
-
-#### 4. Top Correlated Drivers with Delivery Hours (Finding iv)
-Ranking all numerical features in [`outputs/part_a_correlations.csv`](file:///e:/Masai_CapStone_Delhivery/Masai_CapStone_Project_DelhiveryPipeline/outputs/part_a_correlations.csv) by absolute Pearson correlation with `delivery_hours` (excluding `delivery_hours` itself):
-1. **`promised_hours`**: **+0.8372** — The promised delivery window acts as the dominant structural anchor for actual transit duration, reflecting intentional routing tiers.
-2. **`distance_km`**: **+0.4013** — Inter-hub line-haul distance directly dictates line-haul transit time, with each additional 100 km compounding transit risk.
-3. **`n_stops`**: **+0.3247** — The density of rider delivery stops introduces cumulative handover delays during final-mile delivery.
-*(Additionally, hub processing capacity `hub_daily_capacity` is negatively correlated at **-0.3237**, and `hub_tier` is positively correlated at **+0.3175**).*
-
-#### 5. Declared Value Log Transformation Rationale (Finding v)
-- Raw declared parcel values (`declared_value_inr`) in logistics operations are heavily right-skewed by high-value electronics and luxury goods: the median-filled declared value shows a mean of **INR 1,533.0542** pulling substantially above its median of **INR 1,121.50** (a skewness gap of INR 411.5542).
-- Applying the natural log transform (`log_declared_value = ln(declared_value_inr)`) normalizes the distribution into a near-perfect bell curve, pulling the post-transform mean of **7.0277** into tight alignment with the median of **7.0224**, which prevents extreme invoice amounts from dominating regression loss gradients or tree splitting thresholds.
+### Five Core Findings
+1. **Service Type Failure Rate:** **Express** is delayed most often, with a failure rate of **0.4897** (119 / 243 parcels delayed) compared to **0.2056** for Standard and **0.0857** for Economy, driven by its tight 36-hour promise SLA.
+2. **Hub Tier Delay Escalation:** Delay rate increases 11-fold from Tier 1 to Tier 3: **0.0400** in Tier 1 $\rightarrow$ **0.2150** in Tier 2 $\rightarrow$ **0.4400** in Tier 3 (+40.00 percentage points).
+3. **Distance Band Vulnerability:** Delay rate increases monotonically across distance bands: **0.0219** (0–200 km), **0.1368** (201–400 km), **0.4364** (401–600 km), and **0.8523** for long-haul routes (601+ km).
+4. **Top Correlated Features with `delivery_hours`:** The three columns most strongly correlated (ranked by absolute Pearson correlation from `part_a_correlations.csv`, excluding `delivery_hours` itself) are:
+   - `promised_hours`: **+0.8372**
+   - `distance_km`: **+0.4013**
+   - `n_stops`: **+0.3247**
+5. **Log Transformation of Declared Value:** Raw `declared_value_inr` is heavily right-skewed with a mean of **INR 1,533.0542** versus a median of **INR 1,121.50**; applying natural log normalizes the distribution, aligning the post-transform mean of **7.0277** with the median of **7.0224**.
 
 ---
 
