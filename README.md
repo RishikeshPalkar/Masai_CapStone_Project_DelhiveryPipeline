@@ -26,7 +26,7 @@ python predict_delay.py         # 7. Batch score 48 new parcels and assign actio
 
 ---
 
-## 2. Data Findings
+## Part A — Data Findings
 
 All numbers are derived from `outputs/part_a_checks.csv`, `outputs/part_a_delay_by_group.csv`, and `outputs/part_a_correlations.csv`.
 
@@ -62,7 +62,7 @@ All numbers are derived from `outputs/part_a_checks.csv`, `outputs/part_a_delay_
 
 ---
 
-## 3. Model Results (Regression)
+## Part B — Model Results (Regression)
 
 All metrics are recorded in `outputs/part_b_checks.csv`, `outputs/part_b_tree_depth.csv`, `outputs/part_b_metrics.csv`, `outputs/part_b_gb_learning_rate.csv`, and `outputs/part_b_cv.csv`.
 
@@ -90,7 +90,7 @@ All metrics are recorded in `outputs/part_b_checks.csv`, `outputs/part_b_tree_de
 
 ---
 
-## 4. Model Results (Classification)
+## Part C — Model Results (Classification)
 
 All metrics are recorded in `outputs/part_c_models.csv`, `outputs/part_c_feature_scores.csv`, `outputs/part_c_selectk.csv`, `outputs/part_c_tuning.csv`, `outputs/part_c_thresholds.csv`, `outputs/part_c_final_config.csv`, and `outputs/part_c_final_test.csv`.
 
@@ -114,7 +114,7 @@ All metrics are recorded in `outputs/part_c_models.csv`, `outputs/part_c_feature
 
 ---
 
-## 5. Operations Recommendation
+## Part D — Operations Recommendation & Hub Segments
 
 All numbers are derived from `outputs/hub_profile.csv`, `outputs/part_d_separation.csv`, `outputs/hub_segments.csv`, `outputs/segment_profile.csv`, `outputs/tier_vs_segment_mismatch.csv`, and `outputs/new_shipment_actions.csv`.
 
